@@ -6,11 +6,19 @@
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
+#include "fileOperations.h"
 
-int main() {
+int main(int argc, char **argv) {
 
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
+    return 1;
+  }
+
+  (void)argc;
+
+  int outFd = outputFile(argv[1]);
+  if (outFd == -1){
     return 1;
   }
 
@@ -27,12 +35,12 @@ int main() {
       case CMD_WRITE:
         num_pairs = parse_write(STDIN_FILENO, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
         if (num_pairs == 0) {
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
+          write(outFd, "Invalid command. See HELP for usage\n", 37);
           continue;
         }
 
         if (kvs_write(num_pairs, keys, values)) {
-          fprintf(stderr, "Failed to write pair\n");
+          write(outFd, "Failed to write pair\n", 22);
         }
 
         break;
@@ -92,23 +100,21 @@ int main() {
         break;
 
       case CMD_HELP:
-        printf( 
-            "Available commands:\n"
+        write(outFd, "Available commands:\n"
             "  WRITE [(key,value),(key2,value2),...]\n"
             "  READ [key,key2,...]\n"
             "  DELETE [key,key2,...]\n"
             "  SHOW\n"
             "  WAIT <delay_ms>\n"
             "  BACKUP\n" // Not implemented
-            "  HELP\n"
-        );
-
+            "  HELP\n", 148);
         break;
         
       case CMD_EMPTY:
         break;
 
       case EOC:
+        close(outFd);
         kvs_terminate();
         return 0;
     }
