@@ -10,6 +10,8 @@
 #include "operations.h"
 #include <dirent.h>
 #include <fcntl.h>
+#include <string.h>
+#include <sys/stat.h>
 
 int main(int argc, char *argv[])
 {
@@ -28,32 +30,46 @@ int main(int argc, char *argv[])
   if (dir == NULL)
   {
     perror("Couldn't open directory");
-    exit(EXIT_FAILURE);
+    return(EXIT_FAILURE);
+  }
+  if (chdir(dirPath) == -1){
+    perror("Couldn't go inside directory");
+    return(EXIT_FAILURE);
   }
 
   struct dirent *fileDir;
   while ((fileDir = readdir(dir)) != NULL)
-  { // leio a diretora e dentro deste while tenho de fazer open_file para os ficheiros do tipo ".job"
-    if (fileDir->d_type == DT_REG)
+  { // leio a diretoria e dentro deste while tenho de fazer open_file para os ficheiros do tipo ".job"
+
+    struct stat fileStat;
+    if (stat(fileDir->d_name, &fileStat) == -1)
+    {
+        perror("Couldn't stat file");
+        continue;
+    }
+
+    if (S_ISREG(fileStat.st_mode))
     { // verifica se é um regular file
       const char *fileName = fileDir->d_name;
       const char *fileExtension = strrchr(fileName, '.'); // fileextension será depois do ponto
       if (fileExtension != NULL && strcmp(fileExtension, ".job") == 0)
       { // só leio ficheiros do tipo ".job"
-        char fullPath[PATH_MAX];
-        int fd = open(fullPath, O_RDONLY);
+        int fd = open(argv[1], O_RDONLY);
         if(fd==-1){
           perror("Couldn't open file");
           continue;
         }
-        while (1)
+        if (outputFile(fileName) == -1)
+          continue;
+        enum Command fileOver = 0;
+        while (fileOver != EOC)
         {
           char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
           char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
           unsigned int delay;
           size_t num_pairs;
 
-          switch (get_next(fd))
+          switch (fileOver = get_next(fd))
           {
           case CMD_WRITE:
             num_pairs = parse_write(STDIN_FILENO, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
@@ -149,11 +165,11 @@ int main(int argc, char *argv[])
 
           case EOC:
             close(fd);
-            continue;
+            break;
           }
         }
       }
     }
   }
-  closedir(dirPath);
+  closedir(dir);
 }

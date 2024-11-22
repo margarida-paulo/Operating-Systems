@@ -45,5 +45,6 @@ size_t parse_read_delete(int fd, char keys[][MAX_STRING_SIZE], size_t max_keys, 
 /// @param thread_id Pointer to the variable to store the thread ID in. May not be set.
 /// @return 0 if no thread was specified, 1 if a thread was specified, -1 on error.
 int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id);
+int outputFile(const char *nomeFicheiro);
 
 #endif  // KVS_PARSER_H

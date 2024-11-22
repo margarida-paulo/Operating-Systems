@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include "constants.h"
+#include <stdio.h>
 
 static int read_string(int fd, char *buffer, size_t max)
 {
@@ -313,45 +314,45 @@ size_t parse_read_delete(int fd, char keys[][MAX_STRING_SIZE], size_t max_keys, 
   return num_keys;
 }
 
-int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id)
-{
+int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id) {
   char ch;
 
-  if (read_uint(fd, delay, &ch) != 0)
-  {
+  if (read_uint(fd, delay, &ch) != 0) {
     cleanup(fd);
     return -1;
   }
 
-  if (ch == ' ')
-  {
-    if (thread_id == NULL)
-    {
+  if (ch == ' ') {
+    if (thread_id == NULL) {
       cleanup(fd);
       return 0;
     }
 
-    if (read_uint(fd, thread_id, &ch) != 0 || (ch != '\n' && ch != '\0'))
-    {
+    if (read_uint(fd, thread_id, &ch) != 0 || (ch != '\n' && ch != '\0')) {
       cleanup(fd);
       return -1;
     }
 
     return 1;
-  }
-  else if (ch == '\n' || ch == '\0')
-  {
+  } else if (ch == '\n' || ch == '\0') {
     return 0;
-  }
-  else
-  {
+  } else {
     cleanup(fd);
     return -1;
   }
+}
 
-  // fechar o ficheiro
-  void close_file()
-  {
-    close(fd);
-  }
+int outputFile(const char *nomeFicheiro){
+  size_t len = strlen(nomeFicheiro);
+	char ficheiro[strlen(nomeFicheiro) + 1];
+	strcpy(ficheiro, nomeFicheiro);
+  ficheiro[len - 4] = '.';
+  ficheiro[len - 3] = 'o';
+  ficheiro[len - 2] = 'u';
+  ficheiro[len - 1] = 't';
+	int fd = open(ficheiro, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+	if (fd == -1){
+		perror("Couldn't open output file");
+	}
+	return fd;
 }
