@@ -18,11 +18,6 @@ int main(int argc, char *argv[])
   if(argc!=2){
     fprintf(stderr, "wrong argument count\n"); //perguntar ao stor
   }
-  if (kvs_init())
-  {
-    fprintf(stderr, "Failed to initialize KVS\n");
-    return 1;
-  }
 
   // aqui na main eu abro a diretoria e vejo se ela existe (!= NULL)
   char *dirPath = argv[1];
@@ -49,19 +44,26 @@ int main(int argc, char *argv[])
     }
 
     if (S_ISREG(fileStat.st_mode))
-    { // verifica se é um regular file
+    {
+      // verifica se é um regular file
       const char *fileName = fileDir->d_name;
       const char *fileExtension = strrchr(fileName, '.'); // fileextension será depois do ponto
       if (fileExtension != NULL && strcmp(fileExtension, ".job") == 0)
       { // só leio ficheiros do tipo ".job"
-        int fd = open(argv[1], O_RDONLY);
+        int fd = open(fileDir->d_name, O_RDONLY);
+        int outputFd;
         if(fd==-1){
           perror("Couldn't open file");
           continue;
         }
-        if (outputFile(fileName) == -1)
+        if ((outputFd = outputFile(fileName)) == -1)
           continue;
         enum Command fileOver = 0;
+        if (kvs_init())
+        {
+          fprintf(stderr, "Failed to initialize KVS\n");
+          return 1;
+        }
         while (fileOver != EOC)
         {
           char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
@@ -72,83 +74,83 @@ int main(int argc, char *argv[])
           switch (fileOver = get_next(fd))
           {
           case CMD_WRITE:
-            num_pairs = parse_write(STDIN_FILENO, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+            num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
             if (num_pairs == 0)
             {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              write(outputFd, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
 
-            if (kvs_write(num_pairs, keys, values))
+            if (kvs_write(num_pairs, keys, values, outputFd))
             {
-              fprintf(stderr, "Failed to write pair\n");
+              write(outputFd, "Failed to write pair\n", strlen("Failed to write pair\n"));
             }
 
             break;
 
           case CMD_READ:
-            num_pairs = parse_read_delete(STDIN_FILENO, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+            num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
             if (num_pairs == 0)
             {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              write(outputFd, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
 
-            if (kvs_read(num_pairs, keys))
+            if (kvs_read(num_pairs, keys, outputFd))
             {
-              fprintf(stderr, "Failed to read pair\n");
+              write(outputFd, "Failed to read pair\n", strlen("Failed to read pair\n"));
             }
             break;
 
           case CMD_DELETE:
-            num_pairs = parse_read_delete(STDIN_FILENO, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+            num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
             if (num_pairs == 0)
             {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              write(outputFd, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
 
-            if (kvs_delete(num_pairs, keys))
+            if (kvs_delete(num_pairs, keys, outputFd))
             {
-              fprintf(stderr, "Failed to delete pair\n");
+              write(outputFd, "Failed to delete pair\n", strlen("Failed to delete pair\n"));
             }
             break;
 
           case CMD_SHOW:
 
-            kvs_show();
+            kvs_show(outputFd);
             break;
 
           case CMD_WAIT:
-            if (parse_wait(STDIN_FILENO, &delay, NULL) == -1)
+            if (parse_wait(fd, &delay, NULL) == -1)
             {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              write(outputFd, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
 
             if (delay > 0)
             {
-              printf("Waiting...\n");
+              write(outputFd, "Waiting...\n", strlen("Waiting...\n"));
               kvs_wait(delay);
             }
             break;
 
           case CMD_BACKUP:
 
-            if (kvs_backup())
+            if (kvs_backup(outputFd))
             {
-              fprintf(stderr, "Failed to perform backup.\n");
+              write(outputFd, "Failed to perform backup.\n", strlen("Failed to perform backup.\n"));
             }
             break;
 
           case CMD_INVALID:
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            write(outputFd, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
             break;
 
           case CMD_HELP:
-            printf(
+            write(outputFd,
                 "Available commands:\n"
                 "  WRITE [(key,value),(key2,value2),...]\n"
                 "  READ [key,key2,...]\n"
@@ -156,7 +158,14 @@ int main(int argc, char *argv[])
                 "  SHOW\n"
                 "  WAIT <delay_ms>\n"
                 "  BACKUP\n" // Not implemented
-                "  HELP\n");
+                "  HELP\n", strlen("Available commands:\n"
+                "  WRITE [(key,value),(key2,value2),...]\n"
+                "  READ [key,key2,...]\n"
+                "  DELETE [key,key2,...]\n"
+                "  SHOW\n"
+                "  WAIT <delay_ms>\n"
+                "  BACKUP\n" // Not implemented
+                "  HELP\n"));
 
             break;
 
@@ -165,6 +174,12 @@ int main(int argc, char *argv[])
 
           case EOC:
             close(fd);
+            close(outputFd);
+            if (kvs_terminate())
+            {
+              fprintf(stderr, "Failed to terminate KVS\n");
+              return 1;
+            }
             break;
           }
         }

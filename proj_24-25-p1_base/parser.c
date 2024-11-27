@@ -350,7 +350,7 @@ int outputFile(const char *nomeFicheiro){
   ficheiro[len - 3] = 'o';
   ficheiro[len - 2] = 'u';
   ficheiro[len - 1] = 't';
-	int fd = open(ficheiro, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+	int fd = open(ficheiro, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd == -1){
 		perror("Couldn't open output file");
 	}
