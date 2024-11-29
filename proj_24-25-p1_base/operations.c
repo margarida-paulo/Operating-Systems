@@ -19,7 +19,8 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
 
 int kvs_init() {
   if (kvs_table != NULL) {
-    fprintf(stderr, "KVS state has already been initialized\n");
+    //fprintf(stderr, "KVS state has already been initialized\n");
+    write(STDERR_FILENO, "KVS state has already been initialized\n", strlen("KVS state has already been initialized\n"));
     return 1;
   }
 
@@ -29,7 +30,7 @@ int kvs_init() {
 
 int kvs_terminate() {
   if (kvs_table == NULL) {
-    fprintf(stderr, "KVS state must be initialized\n");
+    write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
 
@@ -40,7 +41,7 @@ int kvs_terminate() {
 
 int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE], int outputFd) {
   if (kvs_table == NULL) {
-    write(outputFd, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
+    write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
 
@@ -59,7 +60,7 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
 
 int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
   if (kvs_table == NULL) {
-    write(outputFd, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
+    write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
   write(outputFd, "[", 1);
@@ -76,6 +77,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
       write(outputFd, result, strlen(keys[i]));
       write(outputFd,")", 1);
     }
+    free(result);
   }
   write(outputFd, "]\n", 2);
   return 0;
@@ -83,17 +85,24 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
 
 int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
   if (kvs_table == NULL) {
-    write(outputFd, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
+    write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
 
-  for (size_t i = 0; i < num_pairs; i++) {
+int aux = 0;
+
+for (size_t i = 0; i < num_pairs; i++) {
     if (delete_pair(kvs_table, keys[i]) != 0) {
-      //printf("(%s,KVSMISSING)", keys[i]);
+      if (!aux) {
+        write(outputFd, "[", 1);
+        aux = 1;
+      }
       write(outputFd, "(", 1);
       write(outputFd, keys[i], strlen(keys[i]));
-      write(outputFd, ",KVSMISSING)", strlen(",KVSMISSING)"));
-    }
+      write(outputFd, ",KVSMISSING)", strlen(",KVSMISSING)"));    }
+  }
+  if (aux) {
+    write(outputFd, "]\n", 2);
   }
 
   return 0;

@@ -16,7 +16,8 @@
 int main(int argc, char *argv[])
 {
   if(argc!=2){
-    fprintf(stderr, "wrong argument count\n"); //perguntar ao stor
+    write(STDERR_FILENO, "wrong argument count\n", strlen("wrong argument count\n")); //perguntar ao stor
+    return (EXIT_FAILURE);
   }
 
   // aqui na main eu abro a diretoria e vejo se ela existe (!= NULL)
@@ -61,7 +62,8 @@ int main(int argc, char *argv[])
         enum Command fileOver = 0;
         if (kvs_init())
         {
-          fprintf(stderr, "Failed to initialize KVS\n");
+          //fprintf(stderr, "Failed to initialize KVS\n");
+          write(STDERR_FILENO, "Failed to initialize KVS\n", strlen("Failed to initialize KVS\n"));
           return 1;
         }
         while (fileOver != EOC)
@@ -151,21 +153,21 @@ int main(int argc, char *argv[])
 
           case CMD_HELP:
             write(outputFd,
-                "Available commands:\n"
-                "  WRITE [(key,value),(key2,value2),...]\n"
-                "  READ [key,key2,...]\n"
-                "  DELETE [key,key2,...]\n"
-                "  SHOW\n"
-                "  WAIT <delay_ms>\n"
-                "  BACKUP\n" // Not implemented
-                "  HELP\n", strlen("Available commands:\n"
-                "  WRITE [(key,value),(key2,value2),...]\n"
-                "  READ [key,key2,...]\n"
-                "  DELETE [key,key2,...]\n"
-                "  SHOW\n"
-                "  WAIT <delay_ms>\n"
-                "  BACKUP\n" // Not implemented
-                "  HELP\n"));
+              "Available commands:\n"
+              "  WRITE [(key,value)(key2,value2),...]\n"
+              "  READ [key,key2,...]\n"
+              "  DELETE [key,key2,...]\n"
+              "  SHOW\n"
+              "  WAIT <delay_ms>\n"
+              "  BACKUP\n" // Not implemented
+              "  HELP\n", strlen("Available commands:\n"
+              "  WRITE [(key,value)(key2,value2),...]\n"
+              "  READ [key,key2,...]\n"
+              "  DELETE [key,key2,...]\n"
+              "  SHOW\n"
+              "  WAIT <delay_ms>\n"
+              "  BACKUP\n" // Not implemented
+              "  HELP\n"));
 
             break;
 
@@ -177,7 +179,7 @@ int main(int argc, char *argv[])
             close(outputFd);
             if (kvs_terminate())
             {
-              fprintf(stderr, "Failed to terminate KVS\n");
+              write(STDERR_FILENO, "Failed to terminate KVS\n", strlen("Failed to terminate KVS\n"));
               return 1;
             }
             break;
