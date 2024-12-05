@@ -48,9 +48,9 @@ int main(int argc, char *argv[])
     {
       // verifica se é um regular file
       const char *fileName = fileDir->d_name;
-      const char *fileExtension = strrchr(fileName, '.'); // fileextension será depois do ponto
-      if (fileExtension != NULL && strcmp(fileExtension, ".job") == 0)
-      { // só leio ficheiros do tipo ".job"
+      int fileNameLength = strlen(fileName);
+      // só leio ficheiros do tipo ".job":
+      if (MAX_JOB_FILE_NAME_SIZE > fileNameLength && fileNameLength > 4 && strcmp(fileName + (fileNameLength - 4), ".job") == 0) {
         int fd = open(fileDir->d_name, O_RDONLY);
         int outputFd;
         if(fd==-1){
