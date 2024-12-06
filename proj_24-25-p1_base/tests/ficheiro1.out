@@ -1,0 +1,11 @@
+Available commands:
+  WRITE [(key,value)(key2,value2),...]
+  READ [key,key2,...]
+  DELETE [key,key2,...]
+  SHOW
+  WAIT <delay_ms>
+  BACKUP
+  HELP
+(Fernando,Pessoa)
+(Luís,Camões)
+(Mariana,Mari)

@@ -1,3 +1,4 @@
+
 #define _DEFAULT_SOURCE
 
 #include <limits.h>
@@ -48,7 +49,7 @@ int main(int argc, char *argv[])
     {
       // verifica se é um regular file
       const char *fileName = fileDir->d_name;
-      int fileNameLength = strlen(fileName);
+      size_t fileNameLength = strlen(fileName);
       // só leio ficheiros do tipo ".job":
       if (MAX_JOB_FILE_NAME_SIZE > fileNameLength && fileNameLength > 4 && strcmp(fileName + (fileNameLength - 4), ".job") == 0) {
         int fd = open(fileDir->d_name, O_RDONLY);

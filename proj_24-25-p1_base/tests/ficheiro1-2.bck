@@ -3,4 +3,8 @@ SHOW
 WRITE [(Fernando,Pessoa)(Luís,Camões)]
 BACKUP
 WRITE [(Mariana,Mari)]
+BACKUP
+BACKUP
+BACKUP
+BACKUP
 SHOW
