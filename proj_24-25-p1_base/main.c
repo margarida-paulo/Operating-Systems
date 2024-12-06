@@ -33,6 +33,14 @@ int main(int argc, char *argv[])
     perror("Couldn't go inside directory");
     return(EXIT_FAILURE);
   }
+  // A inicialização da tabela estava a ser feita dentro do while, mas tem de ser fora porque
+  // a tabela é única, todos os ficheiros escrevem para o mesmo sítio.
+  if (kvs_init())
+  {
+    //fprintf(stderr, "Failed to initialize KVS\n");
+    write(STDERR_FILENO, "Failed to initialize KVS\n", strlen("Failed to initialize KVS\n"));
+    return 1;
+  }
 
   struct dirent *fileDir;
   while ((fileDir = readdir(dir)) != NULL)
@@ -61,12 +69,6 @@ int main(int argc, char *argv[])
         if ((outputFd = outputFile(fileName)) == -1)
           continue;
         enum Command fileOver = 0;
-        if (kvs_init())
-        {
-          //fprintf(stderr, "Failed to initialize KVS\n");
-          write(STDERR_FILENO, "Failed to initialize KVS\n", strlen("Failed to initialize KVS\n"));
-          return 1;
-        }
         while (fileOver != EOC)
         {
           char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
@@ -178,16 +180,17 @@ int main(int argc, char *argv[])
           case EOC:
             close(fd);
             close(outputFd);
-            if (kvs_terminate())
-            {
-              write(STDERR_FILENO, "Failed to terminate KVS\n", strlen("Failed to terminate KVS\n"));
-              return 1;
-            }
             break;
           }
         }
+
       }
     }
+  }
+  if (kvs_terminate())
+  {
+    write(STDERR_FILENO, "Failed to terminate KVS\n", strlen("Failed to terminate KVS\n"));
+    return 1;
   }
   closedir(dir);
 }
