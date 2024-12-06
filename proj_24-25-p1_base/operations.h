@@ -2,6 +2,17 @@
 #define KVS_OPERATIONS_H
 
 #include <stddef.h>
+#include <pthread.h>
+#include "constants.h"
+
+/// Locks the kvs table mutex in write mode.
+void write_lock_kvs_mutex();
+
+/// Locks the kvs table mutex in read mode.
+void read_lock_kvs_mutex();
+
+/// Unlocks the kvs table mutex.
+void unlock_kvs_mutex();
 
 /// Initializes the KVS state.
 /// @return 0 if the KVS state was initialized successfully, 1 otherwise.

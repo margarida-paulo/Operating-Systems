@@ -1,0 +1,38 @@
+Available commands:
+  WRITE [(key,value)(key2,value2),...]
+  READ [key,key2,...]
+  DELETE [key,key2,...]
+  SHOW
+  WAIT <delay_ms>
+  BACKUP
+  HELP
+(Alexandre,Rodrigues)
+(Ana,Martins)
+(Adriana,Lopes)
+(Alberto,Pereira)
+(Cristina,Sousa)
+(Carlos,Vinícius)
+(Fabiana,Alves)
+(Gustavo,Lima)
+(Nicolas,Mendes)
+(Ricardo,Oliveira)
+(Alexandre,Rodrigues)
+(Ana,Martins)
+(Adriana,Lopes)
+(Alberto,Pereira)
+(Cristina,Sousa)
+(Carlos,Vinícius)
+(Fabiana,Alves)
+(Gustavo,Lima)
+(Helena,Monteiro)
+(João,Pinto)
+(Marta,Ribeiro)
+(Marco,Ferreira)
+(Margarida,Maggie)
+(Mariana,Mari)
+(Maria,Costa)
+(Nicolas,Mendes)
+(Pedro,Santos)
+(Paulo,Carvalho)
+(Renata,Teixeira)
+(Ricardo,Oliveira)

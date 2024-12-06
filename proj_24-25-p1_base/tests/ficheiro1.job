@@ -1,6 +1,6 @@
 HELP
-SHOW
 WRITE [(Fernando,Pessoa)(Luís,Camões)]
+SHOW
 BACKUP
 WRITE [(Mariana,Mari)]
 SHOW

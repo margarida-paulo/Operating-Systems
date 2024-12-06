@@ -4,7 +4,8 @@ CC = gcc
 CFLAGS = -g -std=c17 -D_POSIX_C_SOURCE=200809L \
 		 -Wall -Werror -Wextra \
 		 -Wcast-align -Wconversion -Wfloat-equal -Wformat=2 -Wnull-dereference -Wshadow -Wsign-conversion -Wswitch-enum -Wundef -Wunreachable-code -Wunused \
-		 -fsanitize=address -fsanitize=undefined
+		 -fsanitize=undefined -fsanitize=address
+#-fsanitize=thread
 
 ifneq ($(shell uname -s),Darwin) # if not MacOS
 	CFLAGS += -fmax-errors=5
@@ -27,3 +28,20 @@ clean:
 format:
 	@which clang-format >/dev/null 2>&1 || echo "Please install clang-format to run this command"
 	clang-format -i *.c *.h
+
+outclean:
+	@echo "Output files removed from the tests folder"
+	@rm tests/*out
+
+backupclean:
+	@echo "Backup files removed from the tests folder"
+	@rm tests/*bck
+
+testsclean:
+	make outclean
+	make backupclean
+
+re:
+	make clean
+	make
+	

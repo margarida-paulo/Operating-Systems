@@ -96,6 +96,12 @@ static void cleanup(int fd)
     ;
 }
 
+void cleanFds(int fd1, int fd2){
+  cleanup(fd1);
+  cleanup(fd2);
+  close(fd1);
+  close(fd2);
+}
 
 enum Command get_next(int fd)
 {

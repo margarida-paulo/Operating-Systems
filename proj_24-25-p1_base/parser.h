@@ -51,5 +51,7 @@ int outputFile(const char *nomeFicheiro);
 
 void perform_backup(const char *fileName, int max_backups, int *backup_counter, pthread_mutex_t *backup_mutex, int outputFd);
 
+void cleanFds(int fd1, int fd2);
+
 
 #endif  // KVS_PARSER_H

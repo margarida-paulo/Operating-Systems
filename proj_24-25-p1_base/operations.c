@@ -9,12 +9,23 @@
 
 static struct HashTable* kvs_table = NULL;
 
-
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
 /// @return Timespec with the given delay.
 static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
+}
+
+void write_lock_kvs_mutex(){
+  pthread_rwlock_wrlock(kvs_table->table_mutex);
+}
+
+void read_lock_kvs_mutex(){
+  pthread_rwlock_rdlock(kvs_table->table_mutex);
+}
+
+void unlock_kvs_mutex(){
+  pthread_rwlock_unlock(kvs_table->table_mutex);
 }
 
 int kvs_init() {
@@ -23,8 +34,10 @@ int kvs_init() {
     write(STDERR_FILENO, "KVS state has already been initialized\n", strlen("KVS state has already been initialized\n"));
     return 1;
   }
-
+  //Inicializamos a mutex que protege as leituras e escritas na tabela
   kvs_table = create_hash_table();
+  kvs_table->table_mutex = malloc(sizeof(pthread_rwlock_t));
+  pthread_rwlock_init(kvs_table->table_mutex, NULL);
   return kvs_table == NULL;
 }
 
@@ -33,9 +46,12 @@ int kvs_terminate() {
     write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
+  pthread_rwlock_destroy(kvs_table->table_mutex);
+  free(kvs_table->table_mutex);
 
   free_table(kvs_table);
   kvs_table = NULL;
+  //Destruímos a mutex que protege as leituras e escritas na tabela
   return 0;
 }
 
@@ -63,6 +79,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
     write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
+  pthread_rwlock_wrlock(kvs_table->table_mutex);
   write(outputFd, "[", 1);
   for (size_t i = 0; i < num_pairs; i++) {
     char* result = read_pair(kvs_table, keys[i]);
@@ -80,6 +97,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
     free(result);
   }
   write(outputFd, "]\n", 2);
+  pthread_rwlock_unlock(kvs_table->table_mutex);
   return 0;
 }
 
@@ -89,9 +107,9 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
     return 1;
   }
 
-int aux = 0;
+  int aux = 0;
 
-for (size_t i = 0; i < num_pairs; i++) {
+  for (size_t i = 0; i < num_pairs; i++) {
     if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
         write(outputFd, "[", 1);
@@ -109,6 +127,7 @@ for (size_t i = 0; i < num_pairs; i++) {
 }
 
 void kvs_show(int outputFd) {
+  read_lock_kvs_mutex();
   for (int i = 0; i < TABLE_SIZE; i++) {
     KeyNode *keyNode = kvs_table->table[i];
     while (keyNode != NULL) {
@@ -121,6 +140,7 @@ void kvs_show(int outputFd) {
       keyNode = keyNode->next; // Move to the next node
     }
   }
+  unlock_kvs_mutex();
 }
 
 int kvs_backup() {
