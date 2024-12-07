@@ -6,6 +6,11 @@
 
 #include "kvs.h"
 #include "constants.h"
+#include <fcntl.h>      
+#include <sys/types.h>  
+#include <sys/stat.h>   
+#include <pthread.h>
+
 
 static struct HashTable* kvs_table = NULL;
 
@@ -143,11 +148,52 @@ void kvs_show(int outputFd) {
   unlock_kvs_mutex();
 }
 
-int kvs_backup() {
-  return 0;
+/*Função para criar o file para colocar o backup: */
+int createBackupFile(const char *fileName, int backupNum)
+{ // função para criar o backup file
+  size_t fileNameLen = strlen(fileName);
+  // criar buffer para o nome do arquivo de backup
+  char backupFileName[MAX_BACKUP_FILE_NAME_SIZE];
+  // copiar nome do file que estamos a copiar
+  snprintf(backupFileName, MAX_BACKUP_FILE_NAME_SIZE, "%.*s-%d.bck", (int)(fileNameLen - 4), fileName, backupNum);
+  // abrir/criar o arquivo de backup
+  int backupFd = open(backupFileName, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
+  if (backupFd == -1)
+  {
+    perror("Couldn't create backup file");
+  }
+
+  return backupFd; // return fd ou -1 em caso de erro
+}
+
+void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum) {
+    pid_t pid = fork();  // Cria o processo filho
+    pthread_mutex_lock(backup_mutex);
+    (*backupNum)++;  // Captura e incrementa o número do backup no processo pai
+    pthread_mutex_unlock(backup_mutex);
+    if (pid == -1) {  // Erro no fork
+        perror("Failed to fork\n");
+        pthread_mutex_lock(backup_mutex);
+        (*backup_counter)--;  // Decrementa o contador de backups em caso de erro
+        pthread_mutex_unlock(backup_mutex);
+        return;
+    }
+
+    if (pid == 0) {  // Processo filho
+        int backupFd = createBackupFile(fileName, *backupNum);  // Usa o número do backup capturado
+        if (backupFd == -1) {
+            exit(EXIT_FAILURE);  // Finaliza se não conseguir criar o arquivo
+        }
+        kvs_show(backupFd);  // Salva o estado no arquivo de backup
+        close(backupFd);
+        exit(EXIT_SUCCESS);  // Finaliza o processo filho
+    } else {  // Processo pai
+        // O pai não precisa fazer nada além de gerenciar o contador de backups
+    }
 }
 
 void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
 }
+

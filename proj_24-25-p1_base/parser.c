@@ -8,6 +8,7 @@
 #include "constants.h"
 #include <stdio.h>
 
+
 static int read_string(int fd, char *buffer, size_t max)
 {
   ssize_t bytes_read;

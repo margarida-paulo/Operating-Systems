@@ -49,7 +49,7 @@ size_t parse_read_delete(int fd, char keys[][MAX_STRING_SIZE], size_t max_keys, 
 int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id);
 int outputFile(const char *nomeFicheiro);
 
-void perform_backup(const char *fileName, int max_backups, int *backup_counter, pthread_mutex_t *backup_mutex, int outputFd);
+void perform_backup(const char *fileName, pthread_mutex_t *backup_mutex);
 
 void cleanFds(int fd1, int fd2);
 

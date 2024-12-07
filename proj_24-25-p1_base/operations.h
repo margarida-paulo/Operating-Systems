@@ -49,7 +49,7 @@ void kvs_show(int outputFd);
 /// Creates a backup of the KVS state and stores it in the correspondent
 /// backup file
 /// @return 0 if the backup was successful, 1 otherwise.
-int kvs_backup();
+void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum);
 
 /// Waits for the last backup to be called.
 void kvs_wait_backup();
@@ -57,5 +57,7 @@ void kvs_wait_backup();
 /// Waits for a given amount of time.
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
+
+void *tableOperations(void *fd_info);
 
 #endif  // KVS_OPERATIONS_H

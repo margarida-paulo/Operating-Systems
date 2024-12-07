@@ -13,8 +13,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <pthread.h>
+#include <sys/wait.h>
 
-
+pthread_mutex_t backup_mutex = PTHREAD_MUTEX_INITIALIZER; // o mutex pros backups é inicializado
+int backup_counter = 0;                                   // counter para o numero de backups em simultaneo
 
 /* Para o exercicio 3, temos de criar tarefas para o programa conseguir tratar de vários ficheiros
  .job em simultâneo. Para isso, vamos usar threads, com mutexes de leitura e escrita para proteger
@@ -107,10 +110,26 @@ void *tableOperations(void *fd_info){
             break;
 
           case CMD_BACKUP:
-
-            if (kvs_backup(fd->output))
+            if (backup_counter >= max_backups)
             {
-              write(fd->output, "Failed to perform backup.\n", strlen("Failed to perform backup.\n"));
+              // Espera até que algum processo filho termine
+              pid_t finished_pid = wait(NULL);
+              if (finished_pid == -1)
+              {
+                perror("Erro ao esperar pelo processo filho\n");
+              }
+              else
+              {
+                printf("Processo filho %d terminou\n", finished_pid); // Debug
+                kvs_backup(fileName, &backup_mutex, &backup_counter, &backupNum);
+              }
+            }
+            else
+            {
+              pthread_mutex_lock(&backup_mutex);
+              backup_counter++;
+              pthread_mutex_unlock(&backup_mutex);
+              kvs_backup(fileName, &backup_mutex, &backup_counter, &backupNum);
             }
             break;
 
@@ -152,14 +171,16 @@ void *tableOperations(void *fd_info){
 
 int main(int argc, char *argv[])
 {
-  if(argc!=3){
+  if(argc!=4){
     write(STDERR_FILENO, "Wrong arguments.\n", strlen("Wrong arguments.\n")); //perguntar ao stor
     write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [MAX_THREADS(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [MAX_THREADS]\n")); //perguntar ao stor  
     return (EXIT_FAILURE);
   }
 
+  //O número máximo de backups em simultaneo é dado pelo input do user
+  int max_backups = atoi(argv[2]);
   //Definimos o número máximo de threads que podemos ter, a partir do input do utilizador
-  int MAX_THREADS = atoi(argv[2]);
+  int MAX_THREADS = atoi(argv[3]);
 
   if (!MAX_THREADS){
     write(STDERR_FILENO, "Wrong arguments.\n", strlen("Wrong arguments.\n")); //perguntar ao stor
@@ -208,6 +229,8 @@ int main(int argc, char *argv[])
       // só leio ficheiros do tipo ".job":
       if (MAX_JOB_FILE_NAME_SIZE > fileNameLength && fileNameLength > 4 && strcmp(fileName + (fileNameLength - 4), ".job") == 0) {
         int fd = open(fileDir->d_name, O_RDONLY);
+        //O backupNum é um counter para o numero de backups de cada file NO TOTAL e é inicializado quando abrimos um ficheiro, porque cada ficheiro tem o seu backupNum
+        int backupNum = 0;
         int outputFd;
         if(fd==-1){
           perror("Couldn't open file");
