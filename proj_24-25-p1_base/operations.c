@@ -169,7 +169,7 @@ int createBackupFile(const char *fileName, int backupNum)
 void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum) {
     pid_t pid = fork();  // Cria o processo filho
     pthread_mutex_lock(backup_mutex);
-    (*backupNum)++;  // Captura e incrementa o número do backup no processo pai
+    (*backupNum)++;  
     pthread_mutex_unlock(backup_mutex);
     if (pid == -1) {  // Erro no fork
         perror("Failed to fork\n");
@@ -180,16 +180,14 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
     }
 
     if (pid == 0) {  // Processo filho
-        int backupFd = createBackupFile(fileName, *backupNum);  // Usa o número do backup capturado
+        int backupFd = createBackupFile(fileName, *backupNum); 
         if (backupFd == -1) {
-            exit(EXIT_FAILURE);  // Finaliza se não conseguir criar o arquivo
+            exit(EXIT_FAILURE);  
         }
-        kvs_show(backupFd);  // Salva o estado no arquivo de backup
+        kvs_show(backupFd);  
         close(backupFd);
-        exit(EXIT_SUCCESS);  // Finaliza o processo filho
-    } else {  // Processo pai
-        // O pai não precisa fazer nada além de gerenciar o contador de backups
-    }
+        exit(EXIT_SUCCESS);  
+    } 
 }
 
 void kvs_wait(unsigned int delay_ms) {
