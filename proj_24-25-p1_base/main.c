@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <pthread.h>
 #include <sys/wait.h>
+#include <semaphore.h>
 
 pthread_mutex_t backup_mutex = PTHREAD_MUTEX_INITIALIZER; // o mutex pros backups é inicializado
 int backup_counter = 0;                                   // counter para o numero de backups em simultaneo
@@ -24,12 +25,11 @@ int backup_counter = 0;                                   // counter para o nume
  a manipulação da tabela. Para não ultrapassar o número máximo de threads, usaremos semáforos.
  */
 
+// Semaforo que garante que não se ultrapassa max_threads em simultâneo
+sem_t semaforo_max_threads;
 
-// @brief Estrutura que guarda os file descriptors necessários para cada tarefa.
-typedef struct fds{
-  int input; // File descriptor of the file that we are reading from
-  int output; // File descriptor of the output file
-} in_out_fds;
+/* pthread_mutex_t active_threads_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex para controlar que threads estão ativos é inicializado
+ */
 
 
 // Esta é a função que vai fazer as operações na tabela, que vai ser chamada em threads.
@@ -110,7 +110,7 @@ void *tableOperations(void *fd_info){
             break;
 
           case CMD_BACKUP:
-            if (backup_counter >= max_backups)
+            if (backup_counter >= fd->max_backups)
             {
               // Espera até que algum processo filho termine
               pid_t finished_pid = wait(NULL);
@@ -121,7 +121,7 @@ void *tableOperations(void *fd_info){
               else
               {
                 printf("Processo filho %d terminou\n", finished_pid); // Debug
-                kvs_backup(fileName, &backup_mutex, &backup_counter, &backupNum);
+                kvs_backup(fd->fileName, &backup_mutex, &backup_counter, &(fd->backupNum), fd->dir, fd);
               }
             }
             else
@@ -129,7 +129,7 @@ void *tableOperations(void *fd_info){
               pthread_mutex_lock(&backup_mutex);
               backup_counter++;
               pthread_mutex_unlock(&backup_mutex);
-              kvs_backup(fileName, &backup_mutex, &backup_counter, &backupNum);
+              kvs_backup(fd->fileName, &backup_mutex, &backup_counter, &(fd->backupNum), fd->dir, fd);
             }
             break;
 
@@ -165,7 +165,9 @@ void *tableOperations(void *fd_info){
             break;
           }
         }
+        cleanFds(fd->input, fd->output);
         free(fd);
+        sem_post(&semaforo_max_threads);
         return NULL;
 }
 
@@ -173,18 +175,20 @@ int main(int argc, char *argv[])
 {
   if(argc!=4){
     write(STDERR_FILENO, "Wrong arguments.\n", strlen("Wrong arguments.\n")); //perguntar ao stor
-    write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [MAX_THREADS(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [MAX_THREADS]\n")); //perguntar ao stor  
+    write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [max_threads(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [max_threads]\n")); //perguntar ao stor  
     return (EXIT_FAILURE);
   }
 
   //O número máximo de backups em simultaneo é dado pelo input do user
   int max_backups = atoi(argv[2]);
   //Definimos o número máximo de threads que podemos ter, a partir do input do utilizador
-  int MAX_THREADS = atoi(argv[3]);
+  int max_threads = atoi(argv[3]);
 
-  if (!MAX_THREADS){
+  // Verificamos se o atoi retornou 0, o que acontece quando há algum erro. Neste caso, consideramos também que se o utilizador escolher
+  // 0 como max_threads ou como max_backups, o programa também não corre. Verificamos também se não foram colocados números negativos.
+  if ((max_threads <= 0) | (max_backups <= 0)){
     write(STDERR_FILENO, "Wrong arguments.\n", strlen("Wrong arguments.\n")); //perguntar ao stor
-    write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [MAX_THREADS(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [MAX_THREADS]\n")); //perguntar ao stor
+    write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [max_threads(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [max_threads]\n")); //perguntar ao stor
     return (EXIT_FAILURE);
   }
 
@@ -198,6 +202,7 @@ int main(int argc, char *argv[])
   }
   if (chdir(dirPath) == -1){
     perror("Couldn't go inside directory");
+    closedir(dir);
     return(EXIT_FAILURE);
   }
   // A inicialização da tabela estava a ser feita dentro do while, mas tem de ser fora porque
@@ -206,12 +211,14 @@ int main(int argc, char *argv[])
   {
     //fprintf(stderr, "Failed to initialize KVS\n");
     write(STDERR_FILENO, "Failed to initialize KVS\n", strlen("Failed to initialize KVS\n"));
+    closedir(dir);
     return 1;
   }
 
   struct dirent *fileDir;
-  pthread_t threads[MAX_THREADS]; //Array para guardar as threads, para, no final, podermos fazer join.
-  int i = 0; // Variável para iterar pelas threads
+  sem_init(&semaforo_max_threads, 0, (unsigned int)max_threads);
+  pthread_t *threads = malloc(0); //Array para guardar as threads, para, no final, podermos fazer join.
+  size_t countThreads = 0;
   while ((fileDir = readdir(dir)) != NULL)
   { // leio a diretoria e dentro deste while tenho de fazer open_file para os ficheiros do tipo ".job"
     struct stat fileStat;
@@ -239,24 +246,51 @@ int main(int argc, char *argv[])
         if ((outputFd = outputFile(fileName)) == -1)
           continue;
         // Temos de criar esta estrutura para guardar os fd's para conseguirmos enviar à função da thread.
+        threads = realloc(threads, (countThreads + 1) * sizeof(threads));
         in_out_fds *fds = malloc(sizeof(in_out_fds));
         fds->input = fd;
         fds->output = outputFd;
-        if (pthread_create(&(threads[i]), NULL, &tableOperations, fds) != 0){
+        fds->max_backups = max_backups;
+        fds->backupNum = backupNum;
+        fds->fileName = fileName;
+        fds->dir = dir;
+        fds->threads = threads;
+        sem_wait(&semaforo_max_threads);
+
+/*         //Checking for a spot in the array of threads that has finished
+        int inactiveThreadFound = 0;
+        while (inactiveThreadFound == 0){
+          for (int a = 0; a < max_threads; a++){
+            if (threadsRunning[a] == 0 || threadsRunning[a] == 1){
+              i = a;
+              threadsRunning[a] = 2;
+              inactiveThreadFound = 1;
+              pthread_mutex_lock(&active_threads_mutex);
+              fds->threadSpot = &(threadsRunning[a]);
+              pthread_mutex_unlock(&active_threads_mutex);
+              break;
+            }
+          }
+        } */
+        if (pthread_create(&(threads[countThreads]), NULL, &tableOperations, fds) != 0){
           write(STDERR_FILENO, "Error in creating thread\n", strlen("Error in creating thread\n"));
+          sem_post(&semaforo_max_threads);
+          cleanFds(fds->input, fds->output);
           free (fds);
         } else
-            i++;
+            countThreads++;
       }
     }
   }
-  for (i = 0; i < MAX_THREADS; i++){
-    pthread_join(threads[i], NULL);
+  for (size_t i = 0; i < countThreads; i++){
+      pthread_join(threads[i], NULL);
   }
+  sem_destroy(&semaforo_max_threads);
+  free(threads);
+  closedir(dir);
   if (kvs_terminate())
   {
     write(STDERR_FILENO, "Failed to terminate KVS\n", strlen("Failed to terminate KVS\n"));
     return 1;
   }
-  closedir(dir);
 }

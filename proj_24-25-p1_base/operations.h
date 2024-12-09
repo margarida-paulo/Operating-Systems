@@ -4,6 +4,20 @@
 #include <stddef.h>
 #include <pthread.h>
 #include "constants.h"
+#include <dirent.h>
+
+
+// @brief Estrutura que guarda os file descriptors e outras informações necessárias para cada tarefa.
+typedef struct fds{
+  int input; // File descriptor of the file that we are reading from
+  int output; // File descriptor of the output file
+  int max_backups; // Máximo de backups que podem acontecer em simultâneo
+  int backupNum;
+  const char *fileName;
+  DIR *dir;
+  pthread_t *threads;
+} in_out_fds;
+
 
 /// Locks the kvs table mutex in write mode.
 void write_lock_kvs_mutex();
@@ -49,7 +63,7 @@ void kvs_show(int outputFd);
 /// Creates a backup of the KVS state and stores it in the correspondent
 /// backup file
 /// @return 0 if the backup was successful, 1 otherwise.
-void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum);
+void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum, DIR *directory, in_out_fds *fd);
 
 /// Waits for the last backup to be called.
 void kvs_wait_backup();
@@ -59,5 +73,6 @@ void kvs_wait_backup();
 void kvs_wait(unsigned int delay_ms);
 
 void *tableOperations(void *fd_info);
+
 
 #endif  // KVS_OPERATIONS_H

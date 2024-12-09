@@ -6,10 +6,13 @@
 
 #include "kvs.h"
 #include "constants.h"
+#include "operations.h"
+#include "parser.h"
 #include <fcntl.h>      
 #include <sys/types.h>  
 #include <sys/stat.h>   
 #include <pthread.h>
+#include <dirent.h>
 
 
 static struct HashTable* kvs_table = NULL;
@@ -166,7 +169,7 @@ int createBackupFile(const char *fileName, int backupNum)
   return backupFd; // return fd ou -1 em caso de erro
 }
 
-void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum) {
+void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum, DIR *directory, in_out_fds *fd) {
     pid_t pid = fork();  // Cria o processo filho
     pthread_mutex_lock(backup_mutex);
     (*backupNum)++;  
@@ -178,14 +181,23 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
         pthread_mutex_unlock(backup_mutex);
         return;
     }
-
     if (pid == 0) {  // Processo filho
         int backupFd = createBackupFile(fileName, *backupNum); 
         if (backupFd == -1) {
+            free(fd->threads);
+            free(fd);
+            free(kvs_table->table_mutex);
+            free_table(kvs_table);
             exit(EXIT_FAILURE);  
         }
         kvs_show(backupFd);  
         close(backupFd);
+        closedir(directory);
+        cleanFds(fd->input, fd->output);
+        free(fd->threads);
+        free(fd);
+        free(kvs_table->table_mutex);
+        free_table(kvs_table);
         exit(EXIT_SUCCESS);  
     } 
 }
