@@ -141,7 +141,7 @@ void kvs_show(int outputFd) {
     while (keyNode != NULL) {
       write(outputFd,"(", 1);
       write(outputFd, keyNode->key, strlen(keyNode->key));
-      write(outputFd,",", 1);
+      write(outputFd,", ", 2);
       write(outputFd, keyNode->value, strlen(keyNode->value));
       write(outputFd,")\n", 2);
       //printf("(%s, %s)\n", keyNode->key, keyNode->value);
