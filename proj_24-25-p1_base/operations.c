@@ -99,7 +99,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
       write(outputFd,"(", 1);
       write(outputFd, keys[i], strlen(keys[i]));
       write(outputFd,",", 1);
-      write(outputFd, result, strlen(keys[i]));
+      write(outputFd, result, strlen(result));
       write(outputFd,")", 1);
     }
     free(result);
@@ -184,7 +184,10 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
     if (pid == 0) {  // Processo filho
         int backupFd = createBackupFile(fileName, *backupNum); 
         if (backupFd == -1) {
-            free(fd->threads);
+            close(backupFd);
+            closedir(directory);
+            cleanFds(fd->input, fd->output);     
+            //free(fd->threads); 
             free(fd);
             free(kvs_table->table_mutex);
             free_table(kvs_table);
@@ -193,8 +196,8 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
         kvs_show(backupFd);  
         close(backupFd);
         closedir(directory);
+        //free(fd->threads);
         cleanFds(fd->input, fd->output);
-        free(fd->threads);
         free(fd);
         free(kvs_table->table_mutex);
         free_table(kvs_table);

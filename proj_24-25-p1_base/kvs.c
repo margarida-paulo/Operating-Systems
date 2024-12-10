@@ -57,7 +57,6 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
 }
 
 char* read_pair(HashTable *ht, const char *key) {
-    read_lock_kvs_mutex();
     int index = hash(key);
     KeyNode *keyNode = ht->table[index];
     char* value;
@@ -70,7 +69,6 @@ char* read_pair(HashTable *ht, const char *key) {
         }
         keyNode = keyNode->next; // Move to the next node
     }
-    unlock_kvs_mutex();
     return NULL; // Key not found
 }
 

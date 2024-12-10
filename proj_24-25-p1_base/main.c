@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 #include <semaphore.h>
+#include <errno.h>
 
 pthread_mutex_t backup_mutex = PTHREAD_MUTEX_INITIALIZER; // o mutex pros backups é inicializado
 int backup_counter = 0;                                   // counter para o numero de backups em simultaneo
@@ -34,6 +35,7 @@ sem_t semaforo_max_threads;
 
 // Esta é a função que vai fazer as operações na tabela, que vai ser chamada em threads.
 void *tableOperations(void *fd_info){
+        //printf("THREAD CREATED\n");
         in_out_fds *fd = fd_info;
         enum Command fileOver = 0;
         while (fileOver != EOC)
@@ -167,6 +169,7 @@ void *tableOperations(void *fd_info){
         }
         cleanFds(fd->input, fd->output);
         free(fd);
+        //printf("THREAD FINISHED\n");
         sem_post(&semaforo_max_threads);
         return NULL;
 }
@@ -256,22 +259,6 @@ int main(int argc, char *argv[])
         fds->dir = dir;
         fds->threads = threads;
         sem_wait(&semaforo_max_threads);
-
-/*         //Checking for a spot in the array of threads that has finished
-        int inactiveThreadFound = 0;
-        while (inactiveThreadFound == 0){
-          for (int a = 0; a < max_threads; a++){
-            if (threadsRunning[a] == 0 || threadsRunning[a] == 1){
-              i = a;
-              threadsRunning[a] = 2;
-              inactiveThreadFound = 1;
-              pthread_mutex_lock(&active_threads_mutex);
-              fds->threadSpot = &(threadsRunning[a]);
-              pthread_mutex_unlock(&active_threads_mutex);
-              break;
-            }
-          }
-        } */
         if (pthread_create(&(threads[countThreads]), NULL, &tableOperations, fds) != 0){
           write(STDERR_FILENO, "Error in creating thread\n", strlen("Error in creating thread\n"));
           sem_post(&semaforo_max_threads);
@@ -285,6 +272,23 @@ int main(int argc, char *argv[])
   for (size_t i = 0; i < countThreads; i++){
       pthread_join(threads[i], NULL);
   }
+
+    // Wait for all child processes to finish
+  while (1) {
+    pid_t pid = waitpid(-1, NULL, 0);
+      if (pid == -1) {
+        if (errno == ECHILD) {
+          // No more child processes
+          break;
+        } else if (errno == EINTR) {
+          // Interrupted by a signal, continue waiting
+          continue;
+        } else {
+          perror("Error waiting for child process");
+          break;
+        }
+      }
+    }
   sem_destroy(&semaforo_max_threads);
   free(threads);
   closedir(dir);
