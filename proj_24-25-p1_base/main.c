@@ -168,7 +168,7 @@ void *tableOperations(void *fd_info){
           }
         }
         cleanFds(fd->input, fd->output);
-        free(fd);
+        //free(fd);
         //printf("THREAD FINISHED\n");
         sem_post(&semaforo_max_threads);
         return NULL;
@@ -250,20 +250,21 @@ int main(int argc, char *argv[])
           continue;
         // Temos de criar esta estrutura para guardar os fd's para conseguirmos enviar à função da thread.
         threads = realloc(threads, (countThreads + 1) * sizeof(threads));
-        in_out_fds *fds = malloc(sizeof(in_out_fds));
-        fds->input = fd;
-        fds->output = outputFd;
-        fds->max_backups = max_backups;
-        fds->backupNum = backupNum;
-        fds->fileName = fileName;
-        fds->dir = dir;
-        fds->threads = threads;
+        //in_out_fds *fds = malloc(sizeof(in_out_fds));
+        in_out_fds fds;
+        fds.input = fd;
+        fds.output = outputFd;
+        fds.max_backups = max_backups;
+        fds.backupNum = backupNum;
+        fds.fileName = fileName;
+        fds.dir = dir;
+        fds.threads = threads;
         sem_wait(&semaforo_max_threads);
-        if (pthread_create(&(threads[countThreads]), NULL, &tableOperations, fds) != 0){
+        if (pthread_create(&(threads[countThreads]), NULL, &tableOperations, &fds) != 0){
           write(STDERR_FILENO, "Error in creating thread\n", strlen("Error in creating thread\n"));
           sem_post(&semaforo_max_threads);
-          cleanFds(fds->input, fds->output);
-          free (fds);
+          cleanFds(fds.input, fds.output);
+          //free (fds);
         } else
             countThreads++;
       }

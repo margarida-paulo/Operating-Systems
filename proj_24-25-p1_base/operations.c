@@ -187,8 +187,8 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
             close(backupFd);
             closedir(directory);
             cleanFds(fd->input, fd->output);     
-            //free(fd->threads); 
-            free(fd);
+            free(fd->threads); 
+            //free(fd);
             free(kvs_table->table_mutex);
             free_table(kvs_table);
             exit(EXIT_FAILURE);  
@@ -196,9 +196,9 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
         kvs_show(backupFd);  
         close(backupFd);
         closedir(directory);
-        //free(fd->threads);
+        free(fd->threads);
         cleanFds(fd->input, fd->output);
-        free(fd);
+        //free(fd);
         free(kvs_table->table_mutex);
         free_table(kvs_table);
         exit(EXIT_SUCCESS);  
