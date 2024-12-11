@@ -1,17 +1,3 @@
-HELP
-WRITE [(Fernando,Pessoa)(Luís,Camões)]
+WRITE [(a,anna)]
 SHOW
-BACKUP
-WRITE [(Mariana,Mari)]
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
-SHOW
+READ [a]

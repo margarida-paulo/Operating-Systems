@@ -91,6 +91,16 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
     return 1;
   }
   pthread_rwlock_wrlock(kvs_table->table_mutex);
+  for (size_t i = 1; i < num_pairs; i++) { //ordenar as keys antes de procurá-las na hashtable
+    char temp[MAX_STRING_SIZE];
+    strcpy(temp, keys[i]);
+    size_t j = i;
+    while (j > 0 && strcmp(keys[j - 1], temp) > 0) {
+      strcpy(keys[j], keys[j - 1]);
+      j--;
+    }
+    strcpy(keys[j], temp);
+  }
   write(outputFd, "[", 1);
   for (size_t i = 0; i < num_pairs; i++) {
     char* result = read_pair(kvs_table, keys[i]);
