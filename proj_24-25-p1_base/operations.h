@@ -18,6 +18,13 @@ typedef struct fds{
   pthread_t *threads;
 } in_out_fds;
 
+typedef struct generalInfo{
+  struct dirent *fileDir;
+  int max_backups;
+  DIR *dir;
+  pthread_t *threads;
+} info;
+
 
 /// Locks the kvs table mutex in write mode.
 void write_lock_kvs_mutex();

@@ -13,6 +13,9 @@
 #include <sys/stat.h>   
 #include <pthread.h>
 #include <dirent.h>
+#include <errno.h>
+#include <sys/wait.h>
+
 
 
 static struct HashTable* kvs_table = NULL;
@@ -188,9 +191,9 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
             closedir(directory);
             cleanFds(fd->input, fd->output);     
             free(fd->threads); 
-            //free(fd);
             free(kvs_table->table_mutex);
             free_table(kvs_table);
+            free(fd);
             exit(EXIT_FAILURE);  
         }
         kvs_show(backupFd);  
@@ -198,11 +201,27 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
         closedir(directory);
         free(fd->threads);
         cleanFds(fd->input, fd->output);
-        //free(fd);
         free(kvs_table->table_mutex);
         free_table(kvs_table);
+        free(fd);
         exit(EXIT_SUCCESS);  
     } 
+    // Wait for all child processes to finish
+  while (1) {
+    pid_t processId = waitpid(-1, NULL, 0);
+      if (processId == -1) {
+        if (errno == ECHILD) {
+          // No more child processes
+          break;
+        } else if (errno == EINTR) {
+          // Interrupted by a signal, continue waiting
+          continue;
+        } else {
+          perror("Error waiting for child process");
+          break;
+        }
+      }
+    }
 }
 
 void kvs_wait(unsigned int delay_ms) {
