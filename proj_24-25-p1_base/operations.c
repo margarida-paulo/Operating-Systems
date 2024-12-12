@@ -17,6 +17,19 @@
 #include <sys/wait.h>
 
 
+pthread_rwlock_t *table_mutex_for_fork;
+
+void prepare() {
+    pthread_rwlock_wrlock(table_mutex_for_fork);
+}
+
+void parent() {
+    pthread_rwlock_unlock(table_mutex_for_fork);
+}
+
+void child() {
+    pthread_rwlock_unlock(table_mutex_for_fork);
+}
 
 static struct HashTable* kvs_table = NULL;
 
@@ -27,18 +40,6 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
 }
 
-void write_lock_kvs_mutex(){
-  pthread_rwlock_wrlock(kvs_table->table_mutex);
-}
-
-void read_lock_kvs_mutex(){
-  pthread_rwlock_rdlock(kvs_table->table_mutex);
-}
-
-void unlock_kvs_mutex(){
-  pthread_rwlock_unlock(kvs_table->table_mutex);
-}
-
 int kvs_init() {
   if (kvs_table != NULL) {
     //fprintf(stderr, "KVS state has already been initialized\n");
@@ -47,8 +48,6 @@ int kvs_init() {
   }
   //Inicializamos a mutex que protege as leituras e escritas na tabela
   kvs_table = create_hash_table();
-  kvs_table->table_mutex = malloc(sizeof(pthread_rwlock_t));
-  pthread_rwlock_init(kvs_table->table_mutex, NULL);
   return kvs_table == NULL;
 }
 
@@ -57,8 +56,6 @@ int kvs_terminate() {
     write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
-  pthread_rwlock_destroy(kvs_table->table_mutex);
-  free(kvs_table->table_mutex);
 
   free_table(kvs_table);
   kvs_table = NULL;
@@ -81,7 +78,6 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
       write(outputFd, ")\n", 2);
     }
   }
-
   return 0;
 }
 
@@ -90,7 +86,6 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
     write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
     return 1;
   }
-  pthread_rwlock_wrlock(kvs_table->table_mutex);
   write(outputFd, "[", 1);
   for (size_t i = 0; i < num_pairs; i++) {
     char* result = read_pair(kvs_table, keys[i]);
@@ -108,7 +103,6 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
     free(result);
   }
   write(outputFd, "]\n", 2);
-  pthread_rwlock_unlock(kvs_table->table_mutex);
   return 0;
 }
 
@@ -138,7 +132,6 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int outputFd) {
 }
 
 void kvs_show(int outputFd) {
-  read_lock_kvs_mutex();
   for (int i = 0; i < TABLE_SIZE; i++) {
     KeyNode *keyNode = kvs_table->table[i];
     while (keyNode != NULL) {
@@ -151,7 +144,6 @@ void kvs_show(int outputFd) {
       keyNode = keyNode->next; // Move to the next node
     }
   }
-  unlock_kvs_mutex();
 }
 
 /*Função para criar o file para colocar o backup: */
@@ -173,41 +165,46 @@ int createBackupFile(const char *fileName, int backupNum)
 }
 
 void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum, DIR *directory, in_out_fds *fd) {
+     
+    table_mutex_for_fork = fd->table_mutex;
+    // Register fork handlers
+    pthread_atfork(prepare, parent, child);
     pid_t pid = fork();  // Cria o processo filho
-    pthread_mutex_lock(backup_mutex);
-    (*backupNum)++;  
-    pthread_mutex_unlock(backup_mutex);
     if (pid == -1) {  // Erro no fork
+        pthread_mutex_unlock(backup_mutex);
         perror("Failed to fork\n");
         pthread_mutex_lock(backup_mutex);
         (*backup_counter)--;  // Decrementa o contador de backups em caso de erro
-        pthread_mutex_unlock(backup_mutex);
         return;
     }
     if (pid == 0) {  // Processo filho
         int backupFd = createBackupFile(fileName, *backupNum); 
+        int exit_code = EXIT_SUCCESS;
         if (backupFd == -1) {
-            close(backupFd);
-            closedir(directory);
-            cleanFds(fd->input, fd->output);     
-            free(fd->threads); 
-            free(kvs_table->table_mutex);
-            free_table(kvs_table);
-            free(fd);
-            exit(EXIT_FAILURE);  
+            //pthread_rwlock_rdlock(fd->table_mutex);
+            kvs_show(backupFd);
+            //pthread_rwlock_unlock(fd->table_mutex);
+            exit_code = EXIT_FAILURE;  
         }
-        kvs_show(backupFd);  
         close(backupFd);
         closedir(directory);
-        free(fd->threads);
+                //printf("RAN FREE STRUCT A: %p\n", fd->threads);
+        if (fd->threads != NULL)
+          free(fd->threads);
+        fd->dir = NULL;
         cleanFds(fd->input, fd->output);
-        free(kvs_table->table_mutex);
-        free_table(kvs_table);
+        kvs_terminate();
+        pthread_rwlock_destroy(fd->table_mutex);
         free(fd);
-        exit(EXIT_SUCCESS);  
-    } 
-    // Wait for all child processes to finish
-  while (1) {
+        exit(exit_code);  
+    } else{
+      pthread_mutex_lock(backup_mutex);
+      (*backupNum)++;  
+      pthread_mutex_unlock(backup_mutex);
+    }
+
+/*     // Wait for all child processes to finish
+    while (1) {
     pid_t processId = waitpid(-1, NULL, 0);
       if (processId == -1) {
         if (errno == ECHILD) {
@@ -221,7 +218,7 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
           break;
         }
       }
-    }
+    } */
 }
 
 void kvs_wait(unsigned int delay_ms) {

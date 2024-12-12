@@ -31,7 +31,6 @@ struct HashTable* create_hash_table() {
 }
 
 int write_pair(HashTable *ht, const char *key, const char *value) {
-    write_lock_kvs_mutex();
     int index = hash(key);
     KeyNode *keyNode = ht->table[index];
 
@@ -40,7 +39,6 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
         if (strcmp(keyNode->key, key) == 0) {
             free(keyNode->value);
             keyNode->value = strdup(value);
-            unlock_kvs_mutex();
             return 0;
         }
         keyNode = keyNode->next; // Move to the next node
@@ -52,7 +50,6 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
     keyNode->value = strdup(value); // Allocate memory for the value
     keyNode->next = ht->table[index]; // Link to existing nodes
     ht->table[index] = keyNode; // Place new key node at the start of the list
-    unlock_kvs_mutex();
     return 0;
 }
 
@@ -64,7 +61,6 @@ char* read_pair(HashTable *ht, const char *key) {
     while (keyNode != NULL) {
         if (strcmp(keyNode->key, key) == 0) {
             value = strdup(keyNode->value);
-            unlock_kvs_mutex();
             return value; // Return copy of the value if found
         }
         keyNode = keyNode->next; // Move to the next node
@@ -73,7 +69,6 @@ char* read_pair(HashTable *ht, const char *key) {
 }
 
 int delete_pair(HashTable *ht, const char *key) {
-    write_lock_kvs_mutex();
     int index = hash(key);
     KeyNode *keyNode = ht->table[index];
     KeyNode *prevNode = NULL;
@@ -93,17 +88,16 @@ int delete_pair(HashTable *ht, const char *key) {
             free(keyNode->key);
             free(keyNode->value);
             free(keyNode); // Free the key node itself
-            unlock_kvs_mutex();
             return 0; // Exit the function
         }
         prevNode = keyNode; // Move prevNode to current node
         keyNode = keyNode->next; // Move to the next node
     }
-    unlock_kvs_mutex();
     return 1;
 }
 
 void free_table(HashTable *ht) {
+    //write_lock_kvs_mutex();
     for (int i = 0; i < TABLE_SIZE; i++) {
         KeyNode *keyNode = ht->table[i];
         while (keyNode != NULL) {
@@ -114,5 +108,6 @@ void free_table(HashTable *ht) {
             free(temp);
         }
     }
+    //unlock_kvs_mutex();
     free(ht);
 }

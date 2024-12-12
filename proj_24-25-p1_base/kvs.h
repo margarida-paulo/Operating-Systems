@@ -16,7 +16,6 @@ typedef struct KeyNode
 typedef struct HashTable
 {
     KeyNode *table[TABLE_SIZE];
-    pthread_rwlock_t *table_mutex;
 } HashTable;
 
 /// Creates a new event hash table.
