@@ -17,7 +17,7 @@
 #include <sys/wait.h>
 
 
-pthread_rwlock_t *table_mutex_for_fork;
+/* pthread_rwlock_t *table_mutex_for_fork;
 
 void prepare() {
     pthread_rwlock_wrlock(table_mutex_for_fork);
@@ -29,7 +29,7 @@ void parent() {
 
 void child() {
     pthread_rwlock_unlock(table_mutex_for_fork);
-}
+} */
 
 static struct HashTable* kvs_table = NULL;
 
@@ -166,9 +166,9 @@ int createBackupFile(const char *fileName, int backupNum)
 
 void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum, DIR *directory, in_out_fds *fd) {
      
-    table_mutex_for_fork = fd->table_mutex;
+    //table_mutex_for_fork = fd->table_mutex;
     // Register fork handlers
-    pthread_atfork(prepare, parent, child);
+    //pthread_atfork(prepare, parent, child);
     pid_t pid = fork();  // Cria o processo filho
     if (pid == -1) {  // Erro no fork
         pthread_mutex_unlock(backup_mutex);
@@ -189,12 +189,12 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
         close(backupFd);
         closedir(directory);
                 //printf("RAN FREE STRUCT A: %p\n", fd->threads);
-        if (fd->threads != NULL)
-          free(fd->threads);
-        fd->dir = NULL;
+        //if (fd->threads != NULL)
+          //free(fd->threads);
+        //fd->threads = NULL;
         cleanFds(fd->input, fd->output);
         kvs_terminate();
-        pthread_rwlock_destroy(fd->table_mutex);
+        //pthread_rwlock_destroy(fd->table_mutex);
         free(fd);
         exit(exit_code);  
     } else{

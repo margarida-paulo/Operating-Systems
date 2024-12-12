@@ -17,6 +17,7 @@
 #include <sys/wait.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <string.h>
 
 pthread_mutex_t backup_mutex = PTHREAD_MUTEX_INITIALIZER; // o mutex pros backups é inicializado
 int backup_counter = 0;                                   // counter para o numero de backups em simultaneo
@@ -259,7 +260,8 @@ int main(int argc, char *argv[])
         }
         // Temos de criar esta estrutura para guardar os fd's para conseguirmos enviar à função da thread.
         pthread_rwlock_wrlock(&table_mutex);
-        pthread_t *temp_threads = realloc(threads, (countThreads + 1) * sizeof(pthread_t));
+        //pthread_t *temp_threads = realloc(threads, (countThreads + 1) * sizeof(pthread_t));
+        pthread_t *temp_threads = malloc((countThreads + 1) * sizeof(pthread_t));
         if (temp_threads == NULL) {
           // Handle memory allocation failure
           pthread_rwlock_unlock(&table_mutex);
@@ -267,6 +269,11 @@ int main(int argc, char *argv[])
           close(outputFd);
           write(STDERR_FILENO, "Failed to allocate memory for threads\n", strlen("Failed to allocate memory for threads\n"));
           continue;
+          }
+        if (threads != NULL){
+          memcpy(temp_threads, threads, countThreads * sizeof(pthread_t));
+          free(threads);
+          threads = NULL;
         }
         threads = temp_threads;
         pthread_rwlock_unlock(&table_mutex);
@@ -290,6 +297,9 @@ int main(int argc, char *argv[])
       }
     }
   }
+  for (size_t i = 0; i < countThreads; i++){
+      pthread_join(threads[i], NULL);
+  }
 
     // Wait for all child processes to finish
   while (1) {
@@ -308,9 +318,6 @@ int main(int argc, char *argv[])
       }
     }
 
-  for (size_t i = 0; i < countThreads; i++){
-      pthread_join(threads[i], NULL);
-  }
   sem_destroy(&semaforo_max_threads);
       printf("RAN FREE STRUCT A: %p\n", threads);
   if (threads != NULL)
