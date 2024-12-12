@@ -10,10 +10,12 @@ ifneq ($(shell uname -s),Darwin) # if not MacOS
 	CFLAGS += -fmax-errors=5
 endif
 
+LDFLAGS = -lpthread
+
 all: kvs
 
 kvs: main.c constants.h operations.o parser.o kvs.o
-	$(CC) $(CFLAGS) $(SLEEP) -o kvs main.c operations.o parser.o kvs.o
+	$(CC) $(CFLAGS) $(SLEEP) -o kvs main.c operations.o parser.o kvs.o $(LDFLAGS)
 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c ${@:.o=.c}
@@ -43,4 +45,3 @@ testsclean:
 re:
 	make clean
 	make
-	
