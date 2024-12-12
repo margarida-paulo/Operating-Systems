@@ -49,20 +49,19 @@ void *tableOperations(void *fd_info){
           switch (fileOver = get_next(fd->input))
           {
           case CMD_WRITE:
-          pthread_rwlock_wrlock(fd->table_mutex);
             num_pairs = parse_write(fd->input, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
             if (num_pairs == 0)
             {
               write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
-              pthread_rwlock_unlock(fd->table_mutex);   
               continue;
             }
 
-            if (kvs_write(num_pairs, keys, values, fd->output))
+            //pthread_rwlock_wrlock(fd->table_mutex);
+            if (kvs_write(num_pairs, keys, values, fd))
             {
               write(fd->output, "Failed to write pair\n", strlen("Failed to write pair\n"));
             }
-            pthread_rwlock_unlock(fd->table_mutex);
+            //pthread_rwlock_unlock(fd->table_mutex);
             break;
 
           case CMD_READ:
@@ -73,12 +72,10 @@ void *tableOperations(void *fd_info){
               write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
-            pthread_rwlock_rdlock(fd->table_mutex);
-            if (kvs_read(num_pairs, keys, fd->output))
+            if (kvs_read(num_pairs, keys, fd))
             {
               write(fd->output, "Failed to read pair\n", strlen("Failed to read pair\n"));
             }
-            pthread_rwlock_unlock(fd->table_mutex);
             break;
 
           case CMD_DELETE:
@@ -89,12 +86,10 @@ void *tableOperations(void *fd_info){
               write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
-            pthread_rwlock_wrlock(fd->table_mutex);
-            if (kvs_delete(num_pairs, keys, fd->output))
+            if (kvs_delete(num_pairs, keys, fd))
             {
               write(fd->output, "Failed to delete pair\n", strlen("Failed to delete pair\n"));
             }
-            pthread_rwlock_unlock(fd->table_mutex);
             break;
 
           case CMD_SHOW:
@@ -169,7 +164,6 @@ void *tableOperations(void *fd_info){
             break;
 
           case EOC:
-            cleanFds(fd->input, fd->output);
             break;
           }
         }
@@ -260,8 +254,8 @@ int main(int argc, char *argv[])
         }
         // Temos de criar esta estrutura para guardar os fd's para conseguirmos enviar à função da thread.
         pthread_rwlock_wrlock(&table_mutex);
-        //pthread_t *temp_threads = realloc(threads, (countThreads + 1) * sizeof(pthread_t));
-        pthread_t *temp_threads = malloc((countThreads + 1) * sizeof(pthread_t));
+        pthread_t *temp_threads = realloc(threads, (countThreads + 1) * sizeof(pthread_t));
+       // pthread_t *temp_threads = malloc((countThreads + 1) * sizeof(pthread_t));
         if (temp_threads == NULL) {
           // Handle memory allocation failure
           pthread_rwlock_unlock(&table_mutex);
@@ -271,8 +265,6 @@ int main(int argc, char *argv[])
           continue;
           }
         if (threads != NULL){
-          memcpy(temp_threads, threads, countThreads * sizeof(pthread_t));
-          free(threads);
           threads = NULL;
         }
         threads = temp_threads;
@@ -319,7 +311,6 @@ int main(int argc, char *argv[])
     }
 
   sem_destroy(&semaforo_max_threads);
-      printf("RAN FREE STRUCT A: %p\n", threads);
   if (threads != NULL)
     free(threads);
   threads = NULL;

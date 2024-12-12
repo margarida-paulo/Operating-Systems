@@ -97,7 +97,6 @@ int delete_pair(HashTable *ht, const char *key) {
 }
 
 void free_table(HashTable *ht) {
-    //write_lock_kvs_mutex();
     for (int i = 0; i < TABLE_SIZE; i++) {
         KeyNode *keyNode = ht->table[i];
         while (keyNode != NULL) {
@@ -108,6 +107,5 @@ void free_table(HashTable *ht) {
             free(temp);
         }
     }
-    //unlock_kvs_mutex();
     free(ht);
 }
