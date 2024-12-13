@@ -22,21 +22,12 @@
 pthread_mutex_t backup_mutex = PTHREAD_MUTEX_INITIALIZER; // o mutex pros backups é inicializado
 int backup_counter = 0;                                   // counter para o numero de backups em simultaneo
 
-/* Para o exercicio 3, temos de criar tarefas para o programa conseguir tratar de vários ficheiros
- .job em simultâneo. Para isso, vamos usar threads, com mutexes de leitura e escrita para proteger
- a manipulação da tabela. Para não ultrapassar o número máximo de threads, usaremos semáforos.
- */
-
 // Semaforo que garante que não se ultrapassa max_threads em simultâneo
 sem_t semaforo_max_threads;
-
-/* pthread_mutex_t active_threads_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex para controlar que threads estão ativos é inicializado
- */
 
 
 // Esta é a função que vai fazer as operações na tabela, que vai ser chamada em threads.
 void *tableOperations(void *fd_info){
-        //printf("THREAD CREATED\n");
         in_out_fds *fd = fd_info;
         enum Command fileOver = 0;
         while (fileOver != EOC)
@@ -52,16 +43,14 @@ void *tableOperations(void *fd_info){
             num_pairs = parse_write(fd->input, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
             if (num_pairs == 0)
             {
-              write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
+              write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
 
-            //pthread_rwlock_wrlock(fd->table_mutex);
             if (kvs_write(num_pairs, keys, values, fd))
             {
-              write(fd->output, "Failed to write pair\n", strlen("Failed to write pair\n"));
+              write(STDERR_FILENO, "Failed to write pair\n", strlen("Failed to write pair\n"));
             }
-            //pthread_rwlock_unlock(fd->table_mutex);
             break;
 
           case CMD_READ:
@@ -69,12 +58,12 @@ void *tableOperations(void *fd_info){
 
             if (num_pairs == 0)
             {
-              write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
+              write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
             if (kvs_read(num_pairs, keys, fd))
             {
-              write(fd->output, "Failed to read pair\n", strlen("Failed to read pair\n"));
+              write(STDERR_FILENO, "Failed to read pair\n", strlen("Failed to read pair\n"));
             }
             break;
 
@@ -83,12 +72,12 @@ void *tableOperations(void *fd_info){
 
             if (num_pairs == 0)
             {
-              write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
+              write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
             if (kvs_delete(num_pairs, keys, fd))
             {
-              write(fd->output, "Failed to delete pair\n", strlen("Failed to delete pair\n"));
+              write(STDERR_FILENO, "Failed to delete pair\n", strlen("Failed to delete pair\n"));
             }
             break;
 
@@ -101,7 +90,7 @@ void *tableOperations(void *fd_info){
           case CMD_WAIT:
             if (parse_wait(fd->input, &delay, NULL) == -1)
             {
-              write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
+              write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
               continue;
             }
 
@@ -119,11 +108,10 @@ void *tableOperations(void *fd_info){
               pid_t finished_pid = wait(NULL);
               if (finished_pid == -1)
               {
-                perror("Erro ao esperar pelo processo filho\n");
+                write(STDERR_FILENO, "Erro ao esperar pelo processo filho\n", strlen("Erro ao esperar pelo processo filho\n"));
               }
               else
               {
-                printf("Processo filho %d terminou\n", finished_pid); // Debug
                 kvs_backup(fd->fileName, &backup_mutex, &backup_counter, &(fd->backupNum), fd->dir, fd);
               }
             }
@@ -137,7 +125,7 @@ void *tableOperations(void *fd_info){
             break;
 
           case CMD_INVALID:
-            write(fd->output, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
+            write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
             break;
 
           case CMD_HELP:
@@ -148,14 +136,14 @@ void *tableOperations(void *fd_info){
               "  DELETE [key,key2,...]\n"
               "  SHOW\n"
               "  WAIT <delay_ms>\n"
-              "  BACKUP\n" // Not implemented
+              "  BACKUP\n" 
               "  HELP\n", strlen("Available commands:\n"
               "  WRITE [(key,value)(key2,value2),...]\n"
               "  READ [key,key2,...]\n"
               "  DELETE [key,key2,...]\n"
               "  SHOW\n"
               "  WAIT <delay_ms>\n"
-              "  BACKUP\n" // Not implemented
+              "  BACKUP\n" 
               "  HELP\n"));
 
             break;
@@ -169,7 +157,6 @@ void *tableOperations(void *fd_info){
         }
         cleanFds(fd->input, fd->output);
         free(fd);
-        //printf("THREAD FINISHED\n");
         sem_post(&semaforo_max_threads);
         return NULL;
 }
@@ -255,7 +242,6 @@ int main(int argc, char *argv[])
         // Temos de criar esta estrutura para guardar os fd's para conseguirmos enviar à função da thread.
         pthread_rwlock_wrlock(&table_mutex);
         pthread_t *temp_threads = realloc(threads, (countThreads + 1) * sizeof(pthread_t));
-       // pthread_t *temp_threads = malloc((countThreads + 1) * sizeof(pthread_t));
         if (temp_threads == NULL) {
           // Handle memory allocation failure
           pthread_rwlock_unlock(&table_mutex);
@@ -270,6 +256,12 @@ int main(int argc, char *argv[])
         threads = temp_threads;
         pthread_rwlock_unlock(&table_mutex);
         in_out_fds *fds = malloc(sizeof(in_out_fds));
+        if (fds == NULL){
+          close(fd);
+          close(outputFd);
+          write(STDERR_FILENO, "Failed to allocate memory for threads\n", strlen("Failed to allocate memory for threads\n"));
+          continue;
+        }
         fds->input = fd;
         fds->output = outputFd;
         fds->max_backups = max_backups;
