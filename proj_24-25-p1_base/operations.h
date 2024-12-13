@@ -13,10 +13,10 @@ typedef struct fds{
   int output; // File descriptor of the output file
   int max_backups; // Máximo de backups que podem acontecer em simultâneo
   int backupNum;
-  const char *fileName;
+  char *fileName;
   DIR *dir;
   pthread_t *threads;
-  pthread_rwlock_t *table_mutex;
+  pthread_rwlock_t *indiv_locks;
 } in_out_fds;
 
 typedef struct generalInfo{

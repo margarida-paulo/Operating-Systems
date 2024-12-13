@@ -8,9 +8,9 @@
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
-#include <fcntl.h>      
-#include <sys/types.h>  
-#include <sys/stat.h>   
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <dirent.h>
 #include <errno.h>
@@ -69,26 +69,7 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
     return 1;
   }
 
-  for (size_t i = 0; i < num_pairs; i++) {
-    pthread_rwlock_wrlock(fd->table_mutex);
-    if (write_pair(kvs_table, keys[i], values[i]) != 0) {
-      write(fd->output, "Failed to write keypair (", strlen("Failed to write keypair ("));
-      write(fd->output, keys[i], strlen(keys[i]));
-      write(fd->output, ",", 1);
-      write(fd->output, values[i], strlen(values[i]));
-      write(fd->output, ")\n", 2);
-    }
-        pthread_rwlock_unlock(fd->table_mutex);
-  }
-  return 0;
-}
-
-int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
-  if (kvs_table == NULL) {
-    write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
-    return 1;
-  }
-    for (size_t i = 1; i < num_pairs; i++) { //ordenar as keys antes de procurá-las na hashtable
+  for (size_t i = 1; i < num_pairs; i++) { //ordenar as keys antes de procurá-las na hashtable
     char temp[MAX_STRING_SIZE];
     strcpy(temp, keys[i]);
     size_t j = i;
@@ -98,11 +79,79 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
     }
     strcpy(keys[j], temp);
   }
-  write(fd->output, "[", 1);
+
+  int already_locked[LOCKS_AMOUNT] = {0};
+  for(size_t i = 0; i < num_pairs; i++){
+    int index;
+    if (keys[i][0] >= 'A' && keys[i][0] <= 'Z')
+      index = keys[i][0] - 'A';
+    else
+      index = keys[i][0] - 'a';
+    if (!already_locked[index]){
+      pthread_rwlock_wrlock(&(fd->indiv_locks[index]));
+      already_locked[index] = 1;
+    }
+  }
+
   for (size_t i = 0; i < num_pairs; i++) {
-    pthread_rwlock_rdlock(fd->table_mutex);
+    if (write_pair(kvs_table, keys[i], values[i]) != 0) {
+      write(fd->output, "Failed to write keypair (", strlen("Failed to write keypair ("));
+      write(fd->output, keys[i], strlen(keys[i]));
+      write(fd->output, ",", 1);
+      write(fd->output, values[i], strlen(values[i]));
+      write(fd->output, ")\n", 2);
+    }
+  }
+
+  for(size_t i = 0; i < num_pairs; i++){
+    int index;
+    if (keys[i][0] >= 'A' && keys[i][0] <= 'Z')
+      index = keys[i][0] - 'A';
+    else
+      index = keys[i][0] - 'a';
+    if (already_locked[index]){
+      pthread_rwlock_unlock(&(fd->indiv_locks[index]));
+      already_locked[index] = 0;
+    }
+  }
+
+  return 0;
+}
+
+int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
+  if (kvs_table == NULL) {
+    write(STDERR_FILENO, "KVS state must be initialized\n", strlen("KVS state must be initialized\n"));
+    return 1;
+  }
+  for (size_t i = 1; i < num_pairs; i++) { //ordenar as keys antes de procurá-las na hashtable
+    char temp[MAX_STRING_SIZE];
+    strcpy(temp, keys[i]);
+    size_t j = i;
+    while (j > 0 && strcmp(keys[j - 1], temp) > 0) {
+      strcpy(keys[j], keys[j - 1]);
+      j--;
+    }
+    strcpy(keys[j], temp);
+  }
+
+  int already_locked[LOCKS_AMOUNT] = {0};
+  write(fd->output, "[", 1);
+  for(size_t i = 0; i < num_pairs; i++){
+    int index;
+    if (keys[i][0] >= 'A' && keys[i][0] <= 'Z')
+      index = keys[i][0] - 'A';
+    else
+      index = keys[i][0] - 'a';
+    if (!already_locked[index]){
+      pthread_rwlock_rdlock(&(fd->indiv_locks[index]));
+      already_locked[index] = 1;
+    }
+  }
+
+
+
+  for (size_t i = 0; i < num_pairs; i++) {
     char* result = read_pair(kvs_table, keys[i]);
-    pthread_rwlock_unlock(fd->table_mutex);
     if (result == NULL) {
       write(fd->output, "(", 1);
       write(fd->output, keys[i], strlen(keys[i]));
@@ -117,6 +166,19 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
     free(result);
 
   }
+
+  for(size_t i = 0; i < num_pairs; i++){
+    int index;
+    if (keys[i][0] >= 'A' && keys[i][0] <= 'Z')
+      index = keys[i][0] - 'A';
+    else
+      index = keys[i][0] - 'a';
+    if (already_locked[index]){
+      pthread_rwlock_unlock(&(fd->indiv_locks[index]));
+      already_locked[index] = 0;
+    }
+  }
+
   write(fd->output, "]\n", 2);
   return 0;
 }
@@ -128,7 +190,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
   }
 
   int aux = 0;
-  
+
     for (size_t i = 1; i < num_pairs; i++) { //ordenar as keys antes de procurá-las na hashtable
       char temp[MAX_STRING_SIZE];
       strcpy(temp, keys[i]);
@@ -140,10 +202,23 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
       strcpy(keys[j], temp);
     }
 
+  int already_locked[LOCKS_AMOUNT] = {0};
+  write(fd->output, "[", 1);
+  for(size_t i = 0; i < num_pairs; i++){
+    int index;
+    if (keys[i][0] >= 'A' && keys[i][0] <= 'Z')
+      index = keys[i][0] - 'A';
+    else
+      index = keys[i][0] - 'a';
+    if (!already_locked[index]){
+      pthread_rwlock_wrlock(&(fd->indiv_locks[index]));
+      already_locked[index] = 1;
+    }
+  }
+
+
   for (size_t i = 0; i < num_pairs; i++) {
-    pthread_rwlock_wrlock(fd->table_mutex);
     if (delete_pair(kvs_table, keys[i]) != 0) {
-      pthread_rwlock_unlock(fd->table_mutex);
       if (!aux) {
         write(fd->output, "[", 1);
         aux = 1;
@@ -151,11 +226,22 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], in_out_fds *fd) {
       write(fd->output, "(", 1);
       write(fd->output, keys[i], strlen(keys[i]));
       write(fd->output, ",KVSMISSING)", strlen(",KVSMISSING)"));
-    } else
-        pthread_rwlock_unlock(fd->table_mutex);
+    }
   }
   if (aux) {
     write(fd->output, "]\n", 2);
+  }
+
+  for(size_t i = 0; i < num_pairs; i++){
+    int index;
+    if (keys[i][0] >= 'A' && keys[i][0] <= 'Z')
+      index = keys[i][0] - 'A';
+    else
+      index = keys[i][0] - 'a';
+    if (already_locked[index]){
+      pthread_rwlock_unlock(&(fd->indiv_locks[index]));
+      already_locked[index] = 0;
+    }
   }
 
   return 0;
@@ -195,7 +281,7 @@ int createBackupFile(const char *fileName, int backupNum)
 }
 
 void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup_counter, int *backupNum, DIR *directory, in_out_fds *fd) {
-     
+
     //table_mutex_for_fork = fd->table_mutex;
     // Register fork handlers
     //pthread_atfork(prepare, parent, child);
@@ -203,18 +289,18 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
     if (pid == -1) {  // Erro no fork
         pthread_mutex_unlock(backup_mutex);
         perror("Failed to fork\n");
-        pthread_mutex_lock(backup_mutex);
         (*backup_counter)--;  // Decrementa o contador de backups em caso de erro
+        pthread_mutex_lock(backup_mutex);
         return;
     }
     if (pid == 0) {  // Processo filho
-        int backupFd = createBackupFile(fileName, *backupNum); 
+        int backupFd = createBackupFile(fileName, *backupNum);
         int exit_code = EXIT_SUCCESS;
         if (backupFd == -1) {
             //pthread_rwlock_rdlock(fd->table_mutex);
             kvs_show(backupFd);
             //pthread_rwlock_unlock(fd->table_mutex);
-            exit_code = EXIT_FAILURE;  
+            exit_code = EXIT_FAILURE;
         }
         close(backupFd);
         closedir(directory);
@@ -222,13 +308,13 @@ void kvs_backup(const char *fileName, pthread_mutex_t *backup_mutex, int *backup
           //free(fd->threads);
         //fd->threads = NULL;
         cleanFds(fd->input, fd->output);
-        kvs_terminate();
+        //kvs_terminate();
         //pthread_rwlock_destroy(fd->table_mutex);
         free(fd);
-        exit(exit_code);  
+        exit(exit_code);
     } else{
       pthread_mutex_lock(backup_mutex);
-      (*backupNum)++;  
+      (*backupNum)++;
       pthread_mutex_unlock(backup_mutex);
     }
 

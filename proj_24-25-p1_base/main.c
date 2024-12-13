@@ -25,6 +25,7 @@ int backup_counter = 0;                                   // counter para o nume
 // Semaforo que garante que não se ultrapassa max_threads em simultâneo
 sem_t semaforo_max_threads;
 
+pthread_rwlock_t table_mutex; // Lock global para mexer na tabela, protege essencialmente o show
 
 // Esta é a função que vai fazer as operações na tabela, que vai ser chamada em threads.
 void *tableOperations(void *fd_info){
@@ -41,6 +42,7 @@ void *tableOperations(void *fd_info){
           {
           case CMD_WRITE:
             num_pairs = parse_write(fd->input, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+            pthread_rwlock_wrlock(&table_mutex);
             if (num_pairs == 0)
             {
               write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
@@ -51,11 +53,12 @@ void *tableOperations(void *fd_info){
             {
               write(STDERR_FILENO, "Failed to write pair\n", strlen("Failed to write pair\n"));
             }
+            pthread_rwlock_unlock(&table_mutex);
             break;
 
           case CMD_READ:
             num_pairs = parse_read_delete(fd->input, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-
+            pthread_rwlock_rdlock(&table_mutex);
             if (num_pairs == 0)
             {
               write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
@@ -65,11 +68,12 @@ void *tableOperations(void *fd_info){
             {
               write(STDERR_FILENO, "Failed to read pair\n", strlen("Failed to read pair\n"));
             }
+            pthread_rwlock_unlock(&table_mutex);
             break;
 
           case CMD_DELETE:
             num_pairs = parse_read_delete(fd->input, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-
+            pthread_rwlock_rdlock(&table_mutex);
             if (num_pairs == 0)
             {
               write(STDERR_FILENO, "Invalid command. See HELP for usage\n", strlen("Invalid command. See HELP for usage\n"));
@@ -79,12 +83,13 @@ void *tableOperations(void *fd_info){
             {
               write(STDERR_FILENO, "Failed to delete pair\n", strlen("Failed to delete pair\n"));
             }
+            pthread_rwlock_unlock(&table_mutex);
             break;
 
           case CMD_SHOW:
-            pthread_rwlock_rdlock(fd->table_mutex);
+            pthread_rwlock_wrlock(&table_mutex);
             kvs_show(fd->output);
-            pthread_rwlock_unlock(fd->table_mutex);
+            pthread_rwlock_unlock(&table_mutex);
             break;
 
           case CMD_WAIT:
@@ -102,8 +107,10 @@ void *tableOperations(void *fd_info){
             break;
 
           case CMD_BACKUP:
+            pthread_mutex_lock(&backup_mutex);
             if (backup_counter >= fd->max_backups)
             {
+              pthread_mutex_unlock(&backup_mutex);
               // Espera até que algum processo filho termine
               pid_t finished_pid = wait(NULL);
               if (finished_pid == -1)
@@ -117,7 +124,6 @@ void *tableOperations(void *fd_info){
             }
             else
             {
-              pthread_mutex_lock(&backup_mutex);
               backup_counter++;
               pthread_mutex_unlock(&backup_mutex);
               kvs_backup(fd->fileName, &backup_mutex, &backup_counter, &(fd->backupNum), fd->dir, fd);
@@ -136,14 +142,14 @@ void *tableOperations(void *fd_info){
               "  DELETE [key,key2,...]\n"
               "  SHOW\n"
               "  WAIT <delay_ms>\n"
-              "  BACKUP\n" 
+              "  BACKUP\n"
               "  HELP\n", strlen("Available commands:\n"
               "  WRITE [(key,value)(key2,value2),...]\n"
               "  READ [key,key2,...]\n"
               "  DELETE [key,key2,...]\n"
               "  SHOW\n"
               "  WAIT <delay_ms>\n"
-              "  BACKUP\n" 
+              "  BACKUP\n"
               "  HELP\n"));
 
             break;
@@ -156,6 +162,7 @@ void *tableOperations(void *fd_info){
           }
         }
         cleanFds(fd->input, fd->output);
+        free(fd->fileName);
         free(fd);
         sem_post(&semaforo_max_threads);
         return NULL;
@@ -165,7 +172,7 @@ int main(int argc, char *argv[])
 {
   if(argc!=4){
     write(STDERR_FILENO, "Wrong arguments.\n", strlen("Wrong arguments.\n")); //perguntar ao stor
-    write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [max_threads(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [max_threads]\n")); //perguntar ao stor  
+    write(STDERR_FILENO, "Usage: ./kvs [FOLDER_NAME] [max_threads(>0)]\n", strlen("Usage: ./kvs [FOLDER_NAME] [max_threads]\n")); //perguntar ao stor
     return (EXIT_FAILURE);
   }
 
@@ -204,8 +211,20 @@ int main(int argc, char *argv[])
     closedir(dir);
     return 1;
   }
-  pthread_rwlock_t table_mutex;
   pthread_rwlock_init(&table_mutex, NULL);
+
+  //Locs individuais
+  pthread_rwlock_t *indiv_locks;
+  indiv_locks = malloc(sizeof(pthread_rwlock_t) * LOCKS_AMOUNT);
+  if (indiv_locks == NULL){
+    kvs_terminate();
+    closedir(dir);
+    return (1);
+  }
+  for (int i = 0; i < LOCKS_AMOUNT; i++)
+  {
+    pthread_rwlock_init(&(indiv_locks[i]), NULL);
+  }
   struct dirent *fileDir;
   sem_init(&semaforo_max_threads, 0, (unsigned int)max_threads);
   pthread_t *threads = NULL; //Array para guardar as threads, para, no final, podermos fazer join.
@@ -266,10 +285,10 @@ int main(int argc, char *argv[])
         fds->output = outputFd;
         fds->max_backups = max_backups;
         fds->backupNum = backupNum;
-        fds->fileName = fileName;
+        fds->fileName = strdup(fileName);
         fds->dir = dir;
         fds->threads = threads;
-        fds->table_mutex = &table_mutex;
+        fds->indiv_locks = indiv_locks;
         sem_wait(&semaforo_max_threads);
         if (pthread_create(&(threads[countThreads]), NULL, &tableOperations, fds) != 0){
           write(STDERR_FILENO, "Error in creating thread\n", strlen("Error in creating thread\n"));
@@ -282,6 +301,7 @@ int main(int argc, char *argv[])
     }
   }
   for (size_t i = 0; i < countThreads; i++){
+  printf("%ld\n", threads[i]);
       pthread_join(threads[i], NULL);
   }
 
@@ -308,6 +328,7 @@ int main(int argc, char *argv[])
   threads = NULL;
   closedir(dir);
   pthread_rwlock_destroy(&table_mutex);
+  free(indiv_locks);
   if (kvs_terminate())
   {
     write(STDERR_FILENO, "Failed to terminate KVS\n", strlen("Failed to terminate KVS\n"));
